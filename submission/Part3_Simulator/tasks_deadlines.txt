@@ -1,0 +1,12 @@
+# Sample real-time workload with explicit absolute deadlines (5th column)
+# Format: ID arrival burst priority [deadline]
+S1   0  3  2   8
+S2   1  2  1   5
+S3   2  4  3  20
+S4   4  1  1   7
+S5   6  5  2  22
+S6   8  2  1  12
+S7  10  3  3  30
+S8  12  2  2  18
+S9  14  4  4  40
+S10 16  1  1  19

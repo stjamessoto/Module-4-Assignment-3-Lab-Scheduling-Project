@@ -1,0 +1,14 @@
+# Sample workload: 12 tasks, a mix of long CPU-bound jobs and short interactive ones
+# Format: ID arrival burst priority [deadline]
+T1   0  10  3
+T2   1   2  1
+T3   2   7  4
+T4   3   1  2
+T5   5  12  5
+T6   6   3  1
+T7   8   2  2
+T8  10   9  4
+T9  12   1  1
+T10 14   6  3
+T11 15   2  2
+T12 18   4  5

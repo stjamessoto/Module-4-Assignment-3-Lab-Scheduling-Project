@@ -1,0 +1,386 @@
+% Build:  make report      (or: cd report && pdflatex report.tex, twice)
+% Screenshots go in report/screenshots/ with the file names shown in each
+% placeholder box (.png or .jpg). They are picked up automatically.
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+% ---- Fill these in ---------------------------------------------------------
+\newcommand{\studentname}{Santiago Soto}
+\newcommand{\coursename}{CS 375 -- Operating Systems}
+\newcommand{\repolink}{https://github.com/stjamessoto/Module-4-Assignment-3-Lab-Scheduling-Project}
+% ----------------------------------------------------------------------------
+
+% \screenshot{file name without extension}{caption}
+% Shows screenshots/<name>.png (or .jpg/.jpeg); if it is not there yet, shows a box saying which file to add.
+\newcommand{\screenshot}[2]{%
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{screenshots/#1.png}{\includegraphics[width=\linewidth,height=0.6\textheight,keepaspectratio]{screenshots/#1.png}}{%
+    \IfFileExists{screenshots/#1.jpg}{\includegraphics[width=\linewidth,height=0.6\textheight,keepaspectratio]{screenshots/#1.jpg}}{%
+    \IfFileExists{screenshots/#1.jpeg}{\includegraphics[width=\linewidth,height=0.6\textheight,keepaspectratio]{screenshots/#1.jpeg}}{%
+      \fbox{\parbox{0.9\linewidth}{\centering\vspace{1.2cm}
+        \textbf{Screenshot not added yet}\\[4pt]
+        Save it as \texttt{report/screenshots/\detokenize{#1}.png}\vspace{1.2cm}}}}}}
+    \caption{#2}
+  \end{figure}}
+
+\title{Lab 8: Task Scheduling Project\\[4pt]\large Lab Exercises and Modular Scheduling Simulator}
+\author{\studentname\\\coursename}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\noindent\textbf{GitHub repository:}\\\url{\repolink}
+
+\tableofcontents
+\newpage
+
+% ============================================================================
+\section{Overview}
+
+This report covers both parts of the lab. Part~2 is ten standalone C++ programs, one per
+scheduling algorithm, each run on the process table from the assignment
+(Table~\ref{tab:processes}). Part~3 combines the same ten algorithms into one command-line
+simulator built around a polymorphic \texttt{Scheduler} base class, and uses it to compare
+the schedulers on larger workloads.
+
+\begin{table}[H]
+  \centering
+  \begin{tabular}{lccc}
+    \toprule
+    Process & Arrival Time & Burst Time & Priority (lower = higher) \\
+    \midrule
+    P1 & 0 & 8 & 2 \\
+    P2 & 1 & 4 & 1 \\
+    P3 & 2 & 9 & 3 \\
+    P4 & 3 & 5 & 4 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Process table used for every lab exercise.}
+  \label{tab:processes}
+\end{table}
+
+Every program prints the process table, a text Gantt chart in the form \texttt{ID(duration)}
+with a timeline underneath, the waiting and turnaround time of each process, and the
+average waiting time, average turnaround time and CPU utilization. CPU utilization is
+computed as total burst time divided by elapsed time, so idle time is counted.
+
+% ============================================================================
+\section{Part 2: Lab Exercises}
+
+Table~\ref{tab:lab-results} summarises the results of the ten programs on the assignment
+table. All ten finish at $t = 26$ with 100\% CPU utilization, because the CPU is never idle.
+
+\begin{table}[H]
+  \centering
+  \begin{tabular}{llcc}
+    \toprule
+    Ex. & Scheduler & Avg waiting & Avg turnaround \\
+    \midrule
+    1 & FCFS & 8.75 & 15.25 \\
+    2 & SJF (non-preemptive) & 7.75 & 14.25 \\
+    3 & SRTF (preemptive) & 6.50 & 13.00 \\
+    4 & Priority with aging & 8.75 & 15.25 \\
+    5 & Round Robin ($q = 4$) & 11.75 & 18.25 \\
+    6 & Multilevel Queue & 8.75 & 15.25 \\
+    7 & Multilevel Feedback Queue & 14.00 & 20.50 \\
+    8 & Lottery & \multicolumn{2}{c}{varies with the random seed} \\
+    9 & CFS (simplified) & 12.25 & 18.75 \\
+    10 & EDF & 6.50 & 13.00 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Lab results on the assignment process table.}
+  \label{tab:lab-results}
+\end{table}
+
+\subsection{Exercise 1: FCFS (\texttt{fcfs.cpp})}
+Processes are sorted by arrival time and each runs to completion. If the next process has
+not arrived yet, the CPU idles until it does. The order is P1, P2, P3, P4.
+\screenshot{ex01_fcfs}{FCFS output.}
+
+\subsection{Exercise 2: SJF, non-preemptive (\texttt{sjf.cpp})}
+Arrived processes are added to a ready queue, the queue is sorted by burst time, and the
+shortest one runs to completion. Only P1 is present at $t = 0$, so it runs first; after
+that the order is P2, P4, P3. Running the short jobs before P3 lowers the average waiting
+time from 8.75 to 7.75.
+\screenshot{ex02_sjf}{SJF output.}
+
+\subsection{Exercise 3: SRTF, preemptive (\texttt{srtf.cpp})}
+The simulation advances one time unit at a time and always runs the arrived process with
+the least remaining time. P2 preempts P1 at $t = 1$ because its remaining time (4) is
+shorter than P1's (7). The program logs each preemption, and the Gantt chart starts a new
+entry at every context switch. SRTF gives the lowest average waiting time of the ten (6.50).
+\screenshot{ex03_srtf}{SRTF output with the preemption logged.}
+
+\subsection{Exercise 4: Priority with aging (\texttt{priority.cpp})}
+The ready process with the lowest priority number runs to completion.
+\textbf{Enhancement (aging):} for every 5 time units a process has waited, its priority
+improves by one level, so a low-priority process cannot starve. The log shows each
+process's original and aged priority when it is dispatched; by $t = 21$, P4 has aged from
+priority 4 to 1.
+\screenshot{ex04_priority}{Priority scheduling output with the aging log.}
+
+\subsection{Exercise 5: Round Robin (\texttt{rr.cpp})}
+Processes take turns from a FIFO queue with a quantum of 4. A process that still has work
+left is preempted and moved to the back of the queue; processes that arrived during its
+time slice are queued ahead of it. Round Robin has a higher average waiting time (11.75)
+than FCFS here, but every process gets on the CPU much sooner.
+\screenshot{ex05_rr}{Round Robin output.}
+
+\subsection{Exercise 6: Multilevel Queue (\texttt{mlq.cpp})}
+Processes with priority below 3 (P1, P2) go to the high queue, which uses Round Robin with
+a quantum of 4; the rest (P3, P4) go to the low queue, which is FCFS. The high queue is
+always served first, and the low queue runs one time unit at a time so a high-priority
+arrival preempts it immediately.
+\screenshot{ex06_mlq}{Multilevel Queue output showing the queue assignments.}
+
+\subsection{Exercise 7: Multilevel Feedback Queue (\texttt{mlfq.cpp})}
+There are three Round Robin queues with quanta 2, 4 and 8, and every process starts in the
+top queue. \textbf{Feedback:} a process that uses its whole quantum is treated as CPU-bound
+and demoted one level. \textbf{Enhancement:} a process that has waited 8 time units in a
+lower queue is promoted one level. The feedback log lists every demotion and promotion.
+\screenshot{ex07_mlfq}{MLFQ output with the feedback log.}
+
+\subsection{Exercise 8: Lottery (\texttt{lottery.cpp})}
+Each process gets $10 / \mathit{priority}$ tickets (P1 = 5, P2 = 10, P3 = 3, P4 = 2). At
+each step a random ticket is drawn among the ready processes and the winner runs for a
+quantum of 2. \textbf{Enhancement (dynamic tickets):} every ready process that loses a draw
+gains one ticket, and the winner returns to its base amount. The program accepts an
+optional seed (\texttt{./lottery 7}) so that a run can be repeated exactly.
+\screenshot{ex08_lottery}{Lottery output showing every draw and the ticket counts.}
+
+\subsection{Exercise 9: Simplified CFS (\texttt{cfs.cpp})}
+Ready processes are kept in a min-heap ordered by virtual runtime, and the process with
+the smallest value runs for a slice of 2. \textbf{Enhancement (weights):} each process has
+a weight of $1024 / 1.25^{\,\mathit{priority}-1}$ and its virtual runtime grows by
+$\mathit{slice} \times 1024 / \mathit{weight}$, so a higher-priority process accumulates
+virtual runtime more slowly and receives more CPU time. New arrivals start at the current
+minimum virtual runtime.
+\screenshot{ex09_cfs}{CFS output with weights and final virtual runtimes.}
+
+\subsection{Exercise 10: EDF (\texttt{edf.cpp})}
+Each process gets a deadline of $\mathit{arrival} + 2 \times \mathit{burst}$ (P1 = 16,
+P2 = 9, P3 = 20, P4 = 13). A priority queue ordered by deadline picks the process to run
+each time unit, so a nearer deadline preempts. \textbf{Enhancement (schedulability):} the
+program first computes the density $\sum \mathit{burst} / (\mathit{deadline} -
+\mathit{arrival})$, which is 2.0 here, so the deadlines are not guaranteed; after the run it
+reports each deadline as met or missed. P1 and P3 miss theirs.
+\screenshot{ex10_edf}{EDF output with the schedulability check and deadline report.}
+
+% ============================================================================
+\section{Part 3: Modular Task Scheduling Simulator}
+
+\subsection{Design}
+The simulator is built around an abstract base class with one pure virtual method:
+
+\begin{verbatim}
+class Scheduler {
+public:
+    virtual ~Scheduler() = default;
+    virtual void schedule(std::vector<Process>& processes,
+                          Gantt& gantt, int& total_time) = 0;
+    virtual std::string name() const = 0;
+};
+\end{verbatim}
+
+Each of the ten algorithms is a derived class that overrides \texttt{schedule()}.
+\texttt{main()} selects one by name through a small factory function and only ever uses it
+through a \texttt{std::unique\_ptr<Scheduler>}. Adding a scheduler means adding one class
+and one line in the factory. The base class also provides the helpers every scheduler
+needs: running a process for a time slice, recording Gantt entries, and inserting idle time.
+
+\begin{table}[H]
+  \centering
+  \begin{tabular}{ll}
+    \toprule
+    File & Contents \\
+    \midrule
+    \texttt{simulator.cpp} & \texttt{main()}, argument parsing, scheduler factory, reports \\
+    \texttt{process.h} & the \texttt{Process} struct \\
+    \texttt{scheduler.h} & the abstract \texttt{Scheduler} base class and shared helpers \\
+    \texttt{schedulers.h} & the ten derived scheduler classes \\
+    \texttt{utils.h} & input file loading, task generation, metrics, printing \\
+    \texttt{tasks.txt}, \texttt{tasks\_deadlines.txt} & sample input files \\
+    \bottomrule
+  \end{tabular}
+  \caption{Source files of the simulator.}
+\end{table}
+
+\subsection{Usage}
+\begin{verbatim}
+g++ -std=c++17 -pthread simulator.cpp -o simulator
+./simulator --scheduler rr --quantum 4
+./simulator --scheduler srtf --input tasks.txt --output log.txt
+./simulator --compare --random --num 20 --seed 42
+\end{verbatim}
+
+\begin{table}[H]
+  \centering
+  \begin{tabular}{ll}
+    \toprule
+    Option & Meaning \\
+    \midrule
+    \texttt{--scheduler <name>} & fcfs, sjf, srtf, priority, rr, mlq, mlfq, lottery, cfs, edf \\
+    \texttt{--compare [a,b,...]} & run several (default: all) schedulers on the same tasks \\
+    \texttt{--input <file>} & tasks from a file: \texttt{ID arrival burst priority [deadline]} \\
+    \texttt{--random}, \texttt{--num <n>} & generate $n$ random tasks (default 10) \\
+    \texttt{--web} & generate a web-server request workload \\
+    \texttt{--seed <n>} & seed for random tasks, lottery draws and I/O \\
+    \texttt{--quantum <n>} & quantum for rr, mlq and lottery (default 4) \\
+    \texttt{--aging <n>} & priority aging interval (default 5, 0 turns it off) \\
+    \texttt{--io <percent>} & rr: chance of blocking for I/O after a time slice \\
+    \texttt{--cpus <n>} & number of CPUs, each simulated in its own thread \\
+    \texttt{--output <file>} & also write the results to a file \\
+    \bottomrule
+  \end{tabular}
+  \caption{Command-line options.}
+\end{table}
+
+With no task option the simulator uses the assignment table. Besides the Gantt chart it
+reports average waiting, turnaround and response time, CPU utilization, throughput and
+the number of context switches.
+
+\subsection{Enhancements}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Priority aging.} A waiting process gains one priority level every
+        \texttt{--aging} time units. The scheduler logs each decision that aging changed.
+  \item \textbf{EDF deadlines.} Deadlines are read from the optional fifth column of the
+        input file; tasks without one get $\mathit{arrival} + 2 \times \mathit{burst}$. The
+        scheduler reports a density-based schedulability estimate and every missed deadline.
+  \item \textbf{I/O simulation (Round Robin).} With \texttt{--io p}, a process that has not
+        finished at the end of its time slice blocks for 1--5 time units with probability
+        $p$\%, then rejoins the ready queue. Time spent blocked is not counted as waiting.
+  \item \textbf{MLFQ feedback, lottery dynamic tickets, CFS weights.} The same enhancements
+        as in the lab exercises.
+  \item \textbf{Web-server scenario and load balancing.} \texttt{--web} generates a stream
+        of requests in which about one in five is long. With \texttt{--cpus n}, a load
+        balancer sends each request to the CPU that will be free soonest, and each CPU runs
+        its own scheduler instance in a separate \texttt{std::thread}.
+  \item \textbf{Error handling.} Unknown options and schedulers, missing values,
+        non-numeric or out-of-range numbers and unreadable files produce an error message
+        and a non-zero exit code. Malformed lines in an input file are reported with their
+        line number and skipped.
+\end{itemize}
+
+\subsection{Test Runs}
+
+\screenshot{p3_01_rr_default}{Round Robin on the default tasks
+(\texttt{--scheduler rr --quantum 4}). The result matches the lab program.}
+
+\screenshot{p3_02_rr_random}{Round Robin on ten random tasks
+(\texttt{--scheduler rr --random --seed 42}).}
+
+\screenshot{p3_03_srtf_file}{SRTF on tasks read from \texttt{tasks.txt}.}
+
+\screenshot{p3_04_compare}{All ten schedulers compared on \texttt{tasks.txt}.}
+
+\screenshot{p3_05_priority_aging}{Priority scheduling with aging every 3 units; the events
+list shows where aging changed the order.}
+
+\screenshot{p3_06_edf_deadlines}{EDF with deadlines read from \texttt{tasks\_deadlines.txt}.}
+
+\screenshot{p3_07_rr_io}{Round Robin with I/O simulation (\texttt{--io 40}).}
+
+\screenshot{p3_08_web_cpus}{Web-server workload load-balanced across two CPUs.}
+
+\screenshot{p3_09_output_file}{Writing the results to a file with \texttt{--output}.}
+
+\screenshot{p3_10_errors}{Error handling for an unknown scheduler, a missing file and an
+invalid number.}
+
+\subsection{Comparison and Analysis}
+
+Table~\ref{tab:compare} shows all ten schedulers on the 12-task sample workload in
+\texttt{tasks.txt}, which mixes long jobs (bursts of 9--12) with short ones (bursts of
+1--3). It was produced with
+\texttt{./simulator --compare --input tasks.txt --seed 42}. CPU utilization (100\%) and
+throughput (0.2034 tasks per time unit) are the same for every scheduler, because on one
+CPU with no idle time the order of the work does not change when all of it finishes.
+
+\begin{table}[H]
+  \centering
+  \begin{tabular}{lrrrr}
+    \toprule
+    Scheduler & Avg waiting & Avg turnaround & Avg response & Context switches \\
+    \midrule
+    fcfs & 22.67 & 27.58 & 22.67 & 11 \\
+    sjf & 12.50 & 17.42 & 12.50 & 11 \\
+    srtf & 9.92 & 14.83 & 7.08 & 14 \\
+    priority (aging 5) & 19.83 & 24.75 & 19.83 & 11 \\
+    rr ($q = 4$) & 22.17 & 27.08 & 12.08 & 19 \\
+    mlq & 13.00 & 17.92 & 12.08 & 15 \\
+    mlfq & 20.25 & 25.17 & 3.25 & 29 \\
+    lottery (seed 42) & 21.08 & 26.00 & 11.67 & 19 \\
+    cfs & 18.17 & 23.08 & 2.25 & 30 \\
+    edf & 10.75 & 15.67 & 8.75 & 14 \\
+    \bottomrule
+  \end{tabular}
+  \caption{All schedulers on \texttt{tasks.txt} (12 tasks, one CPU).}
+  \label{tab:compare}
+\end{table}
+
+\paragraph{Round Robin vs.\ SRTF.} SRTF has less than half the average waiting time of
+Round Robin (9.92 against 22.17) and a lower average response time (7.08 against 12.08),
+with fewer context switches (14 against 19). SRTF wins on these averages because it always
+finishes the shortest work first. Its weaknesses do not show in the averages: it needs to
+know each burst length in advance, which a real system can only estimate, and a long job
+can be postponed indefinitely while shorter ones keep arriving. Round Robin needs no
+burst estimates and bounds how long any task waits for its next turn, which is why it suits
+interactive systems, at the cost of more context switches and longer turnaround.
+
+\paragraph{Response time vs.\ waiting time.} MLFQ and CFS have the lowest average response
+times (3.25 and 2.25) because every new task gets a short slice almost immediately, but
+they have the highest context-switch counts (29 and 30) and much higher average waiting
+times than SJF or SRTF, since long jobs are interrupted repeatedly. FCFS is the opposite: the fewest
+switches, and the worst waiting and response time (22.67), because short tasks queue behind
+long ones (the convoy effect).
+
+\paragraph{Effect of aging.} On the same workload, priority scheduling without aging
+(\texttt{--aging 0}) has an average waiting time of 14.58, but the low-priority task T5
+waits 38 time units. With aging every 5 units T5 waits 20, and with aging every 3 units it
+waits 15, while the average rises to 19.83 and 22.67. Aging trades average waiting time for
+a bound on how long a low-priority task is postponed.
+
+\paragraph{CPU-bound vs.\ I/O-bound workloads.} For CPU-bound batch work, where only total
+completion time matters and nobody is waiting on a response, the non-preemptive schedulers
+are the best fit: SJF gives a low average turnaround (17.42) with the minimum number of
+context switches, and FCFS is acceptable when the jobs are of similar length. For
+I/O-bound and interactive work, tasks use the CPU in short bursts and need it again quickly
+after each I/O operation, so response time is the metric that matters. MLFQ and CFS are the
+best fit there: a task that gives up the CPU before its quantum ends stays in a
+high-priority queue (MLFQ) or keeps a low virtual runtime (CFS), so it is scheduled soon
+after it becomes ready, and CPU-bound tasks sink to the lower queues without being starved.
+Round Robin is a reasonable simple choice for interactive work but treats both kinds of
+task the same. In the Round Robin I/O simulation on this workload (\texttt{--io 40
+--seed 7}), two tasks blocked for I/O and the other tasks used the CPU in the meantime, so
+utilization stayed at 100\%. EDF is the right choice only when tasks have real deadlines: on
+\texttt{tasks\_deadlines.txt} it meets all 10.
+
+\paragraph{Load balancing.} For the 12-request web workload (\texttt{--web --num 12
+--seed 3}) under Round Robin, one CPU finishes at $t = 51$ with an average waiting time of
+13.25. Two CPUs finish at $t = 28$ with an average waiting time of 4.00, at 89.29\% CPU
+utilization.
+
+\section{References}
+\begin{enumerate}[leftmargin=*]
+  \item Lab handout, \emph{Lab 8: Implementing and Enhancing Task Schedulers in C++} ---
+        source of the starter code (\texttt{Process} struct, \texttt{Scheduler} base class,
+        Round Robin example, argument parsing).
+  \item A.~Silberschatz, P.~B.~Galvin, G.~Gagne, \emph{Operating System Concepts}, 10th
+        ed., Wiley, 2018. Chapter 5, CPU Scheduling.
+  \item R.~H.~Arpaci-Dusseau, A.~C.~Arpaci-Dusseau, \emph{Operating Systems: Three Easy
+        Pieces}, chapters 7--9 (scheduling, MLFQ, lottery scheduling and CFS).
+        \url{https://pages.cs.wisc.edu/~remzi/OSTEP/}
+  \item C.~A.~Waldspurger, W.~E.~Weihl, ``Lottery Scheduling: Flexible Proportional-Share
+        Resource Management,'' \emph{OSDI}, 1994.
+  \item C.~L.~Liu, J.~W.~Layland, ``Scheduling Algorithms for Multiprogramming in a
+        Hard-Real-Time Environment,'' \emph{Journal of the ACM}, 20(1), 1973.
+\end{enumerate}
+
+\end{document}
